@@ -3,54 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <title>Vista Previa - {{ archivo }}</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid #ddd;
-        }
-        th {
-            background-color: #4CAF50;
-            color: white;
-        }
-        .row-even {
-            background-color: #f9f9f9;
-        }
-        .row-odd {
-            background-color: #fff;
-        }
-        .button {
-            display: inline-block;
-            padding: 10px 20px;
-            background-color: #4CAF50;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-        }
-        .button:hover {
-            background-color: #45a049;
-        }
-        p {
-            text-align: center;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
     <h1>Vista Previa de {{ archivo }}</h1>
-    <table>
+    <table class="preview-table">
         <thead>
             <tr>
                 {% for columna in columnas %}
@@ -68,8 +25,6 @@
             {% endfor %}
         </tbody>
     </table>
-    <p>
-        <a href="{{ url_for('ver_archivos') }}" class="button">Volver a Archivos</a>
-    </p>
+    <a href="{{ url_for('ver_archivos') }}" class="action-link">Volver a Archivos</a>
 </body>
 </html>
