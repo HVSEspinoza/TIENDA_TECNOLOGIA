@@ -4,6 +4,7 @@ from utils.helpers import procesar_csv, obtener_tipo_cambio, calcular_precio_con
 import os
 
 def init_routes(app):
+    print("Registrando rutas...")
     almacenes = {
         "alm000": "Lima - Principal", "alm010": "Chiclayo", "alm011": "Trujillo",
         "alm020": "Arequipa", "alm021": "Arequipa-Compuplaza", "alm030": "Cusco",
@@ -75,6 +76,7 @@ def init_routes(app):
 
     @app.route('/productos', methods=['GET', 'POST'])
     def get_productos():
+        print("Solicitud recibida en /productos")
         if request.method == 'POST':
             almacen_id = request.form['almacen_id']
             productos = db.session.query(Producto, Almacen).join(Almacen, Producto.almacen_id == Almacen.id).filter(Producto.almacen_id == almacen_id).all()
@@ -82,4 +84,15 @@ def init_routes(app):
             productos = []
         tipo_cambio = obtener_tipo_cambio()
         igv = 0.18
-        return render_template('productos.html', productos=productos, almacenes=almacenes, tipo_cambio=tipo_cambio, igv=igv)
+
+        # Calcular promocion_soles para cada producto
+        productos_con_promocion = []
+        for producto, almacen in productos:
+            promocion_soles = None
+            if producto.promocion:
+                # Convertir Decimal a float para evitar el error
+                promocion_dolares = float(producto.promocion)
+                promocion_soles = round(promocion_dolares * tipo_cambio * (1 + igv), 2)
+            productos_con_promocion.append((producto, almacen, promocion_soles))
+
+        return render_template('productos.html', productos=productos_con_promocion, almacenes=almacenes, tipo_cambio=tipo_cambio, igv=igv)

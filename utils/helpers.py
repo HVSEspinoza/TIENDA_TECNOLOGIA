@@ -1,9 +1,136 @@
 import pandas as pd
 import unicodedata
 from models.models import Producto
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.options import Options
+from bs4 import BeautifulSoup
+from datetime import datetime
+import json
+import os
+import time
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 
+# Configuración de Selenium
+def setup_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Modo headless para no mostrar el navegador
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+    chrome_options.add_argument("--ignore-certificate-errors")
+    chrome_options.add_argument("--incognito")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    return driver
+
+# Función para obtener la página con Selenium
+def fetch_sunat_page():
+    driver = setup_driver()
+    try:
+        url = "https://e-consulta.sunat.gob.pe/cl-at-ittipcam/tcS01Alias"
+        driver.get(url)
+        
+        # Esperar a que cargue el calendario
+        WebDriverWait(driver, 40).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "table-bordered"))
+        )
+        time.sleep(5)  # Espera adicional para asegurar el renderizado
+
+        html_content = driver.page_source
+        return html_content
+    except Exception as e:
+        print(f"Error al obtener la página de SUNAT con Selenium: {e}")
+        return None
+    finally:
+        driver.quit()
+
+# Función para extraer el tipo de cambio del día actual
+def extract_current_exchange_rate():
+    html_content = fetch_sunat_page()
+    if not html_content:
+        return None
+
+    soup = BeautifulSoup(html_content, 'html.parser')
+    today = datetime.now()
+    # Formato sin ceros iniciales: _2025_3_12
+    today_str = f"_{today.year}_{today.month}_{today.day}"
+
+    # Buscar la celda <td> para el día actual
+    current_cell = soup.find('td', class_=lambda x: x and today_str in x)
+
+    if not current_cell:
+        print(f"No se encontró la celda para {today_str}. Buscando la más reciente...")
+        # Buscar todas las celdas con clase 'current' y tomar la más reciente
+        cells = soup.find_all('td', class_=lambda x: x and 'current' in x)
+        if cells:
+            current_cell = max(cells, key=lambda x: x.get('data-date', '1970-01-01T00:00:00.000Z'))
+        else:
+            print("No se encontraron celdas con clase 'current' en el HTML.")
+            return None
+
+    if current_cell:
+        # Extraer compra y venta
+        compra_div = current_cell.find('div', class_=lambda x: x and 'normal-all-day' in x)
+        venta_div = current_cell.find('div', class_=lambda x: x and 'pap-all-day' in x)
+
+        if not compra_div or not venta_div:
+            print("No se encontraron los valores de compra y venta.")
+            return None
+
+        # Extraer los valores numéricos
+        compra_text = compra_div.text.replace('Compra', '').strip().replace(',', '.')
+        venta_text = venta_div.text.replace('Venta', '').strip().replace(',', '.')
+
+        try:
+            compra = float(compra_text)
+            venta = float(venta_text)
+        except ValueError as e:
+            print(f"Error al convertir los valores a números: {e}")
+            return None
+
+        return {
+            "compra": compra,
+            "venta": venta,
+            "date": today.strftime("%Y-%m-%d")
+        }
+    return None
+
+# Guardar en archivo JSON para caché
+EXCHANGE_RATE_FILE = 'exchange_rates.json'
+
+def save_exchange_rates(rates):
+    with open(EXCHANGE_RATE_FILE, 'w') as f:
+        json.dump(rates, f, indent=2)
+
+# Cargar tasas de cambio desde caché
+def load_exchange_rates():
+    if os.path.exists(EXCHANGE_RATE_FILE):
+        with open(EXCHANGE_RATE_FILE, 'r') as f:
+            return json.load(f)
+    return None
+
+# Función principal para obtener el tipo de cambio
 def obtener_tipo_cambio():
-    return 3.85
+    # Primero intentar cargar desde caché
+    cached_rate = load_exchange_rates()
+    if cached_rate and datetime.strptime(cached_rate["date"], "%Y-%m-%d").date() == datetime.now().date():
+        print("Usando tipo de cambio desde caché:", cached_rate)
+        return cached_rate["venta"]  # Usamos la venta como referencia principal
+
+    # Si no hay caché o la fecha no coincide, extraer desde SUNAT
+    new_rate = extract_current_exchange_rate()
+    if new_rate:
+        save_exchange_rates(new_rate)
+        print("Tipo de cambio actualizado desde SUNAT:", new_rate)
+        return new_rate["venta"]
+    else:
+        print("No se pudo obtener el tipo de cambio desde SUNAT, usando valor por defecto: 3.85")
+        return 3.85  # Valor por defecto si falla la extracción
 
 def calcular_precio_con_igv(precio_dolares, tipo_cambio, igv):
     precio_soles = precio_dolares * tipo_cambio

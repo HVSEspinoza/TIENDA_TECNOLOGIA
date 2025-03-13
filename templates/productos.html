@@ -8,6 +8,13 @@
 <body>
     <a href="/" class="action-link">Volver</a>
     <h1>Productos</h1>
+    
+    <!-- Mostrar el tipo de cambio y el IGV -->
+    <div class="exchange-info">
+        <p><strong>Tipo de cambio (USD a PEN - Venta):</strong> {{ tipo_cambio }}</p>
+        <p><strong>IGV:</strong> {{ igv * 100 }}%</p>
+    </div>
+
     <div class="search-bar">
         <form id="almacenForm" method="post">
             <select name="almacen_id" onchange="enviarFormulario()">
@@ -24,40 +31,113 @@
         <table id="productosTable">
             <thead>
                 <tr>
-                    <th>Código</th>
                     <th>Descripción</th>
                     <th>Stock</th>
-                    <th>Precio en Dólares</th>
                     <th>Precio en Soles</th>
-                    <th>Garantía</th>
                     <th>Marca</th>
                     <th>Categoría</th>
                     <th>Almacén</th>
+                    <th>Acciones</th> <!-- Columna para el botón de detalles -->
                 </tr>
             </thead>
             <tbody>
                 {% if productos %}
-                {% for producto, almacen in productos %}
-                <tr>
-                    <td>{{ producto.codigo }}</td>
+                {% for producto, almacen, promocion_soles in productos %}
+                <tr data-product-id="{{ producto.id }}">
                     <td>{{ producto.descripcion }}</td>
                     <td>{{ producto.stock }}</td>
-                    <td>${{ producto.precio_dolares }}</td>
                     <td>S/{{ producto.precio_soles }}</td>
-                    <td>{{ producto.garantia }}</td>
                     <td>{{ producto.marca }}</td>
                     <td>{{ producto.categoria }}</td>
                     <td>{{ almacen.nombre }}</td>
+                    <td><a href="#" class="details-link" onclick="toggleDetails(event, '{{ producto.id }}');"><span class="details-icon">+</span></a></td>
+                </tr>
+                <!-- Panel de detalles oculto -->
+                <tr class="details-row" id="details-{{ producto.id }}" style="display: none;">
+                    <td colspan="7">
+                        <div class="details-panel">
+                            <p><strong>Código:</strong> {{ producto.codigo }}</p>
+                            <p><strong>Precio en Dólares:</strong> ${{ producto.precio_dolares }}</p>
+                            <p><strong>Garantía:</strong> {{ producto.garantia }}</p>
+                            <p><strong>Promoción (USD):</strong> {% if producto.promocion %}${{ producto.promocion }}{% else %}Sin promoción{% endif %}</p>
+                            <p><strong>Promoción (Soles):</strong> {% if promocion_soles %}S/{{ promocion_soles }}{% else %}Sin promoción{% endif %}</p>
+                            <p><strong>Detalle Promoción:</strong> {{ producto.detalle_promocion if producto.detalle_promocion else 'Sin detalle' }}</p>
+                            <a href="#" class="close-details" onclick="toggleDetails(event, '{{ producto.id }}');">Cerrar</a>
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
                 {% else %}
                 <tr>
-                    <td colspan="9">Selecciona un almacén para ver los productos</td>
+                    <td colspan="7">Selecciona un almacén para ver los productos</td>
                 </tr>
                 {% endif %}
             </tbody>
         </table>
     </div>
     <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+    <script>
+        function toggleDetails(event, productId) {
+            event.preventDefault();
+            const detailsRow = document.getElementById(`details-${productId}`);
+            if (detailsRow.style.display === 'none' || detailsRow.style.display === '') {
+                detailsRow.style.display = 'table-row';
+            } else {
+                detailsRow.style.display = 'none';
+            }
+        }
+
+        function enviarFormulario() {
+            document.getElementById('almacenForm').submit();
+        }
+
+        function buscarProductos() {
+            const input = document.getElementById('searchInput').value.toLowerCase();
+            const rows = document.querySelectorAll('#productosTable tbody tr:not(.details-row)');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(input) ? '' : 'none';
+                // Mostrar u ocultar la fila de detalles si la fila principal está visible
+                const detailsRow = row.nextElementSibling;
+                if (detailsRow && detailsRow.classList.contains('details-row')) {
+                    detailsRow.style.display = row.style.display === 'none' ? 'none' : '';
+                }
+            });
+        }
+    </script>
+
+<script>
+    function toggleDetails(event, productId) {
+        event.preventDefault();
+        const detailsRow = document.getElementById(`details-${productId}`);
+        if (detailsRow.style.display === 'none' || detailsRow.style.display === '') {
+            detailsRow.style.display = 'table-row';
+            detailsRow.classList.add('slide-in'); // Añadir animación de entrada
+        } else {
+            detailsRow.classList.add('slide-out'); // Añadir animación de salida
+            setTimeout(() => {
+                detailsRow.style.display = 'none';
+            }, 300); // Coincide con la duración de la animación
+        }
+    }
+
+    function enviarFormulario() {
+        document.getElementById('almacenForm').submit();
+    }
+
+    function buscarProductos() {
+        const input = document.getElementById('searchInput').value.toLowerCase();
+        const rows = document.querySelectorAll('#productosTable tbody tr:not(.details-row)');
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(input) ? '' : 'none';
+            const detailsRow = row.nextElementSibling;
+            if (detailsRow && detailsRow.classList.contains('details-row')) {
+                detailsRow.style.display = row.style.display === 'none' ? 'none' : '';
+            }
+        });
+    }
+</script>
+
 </body>
 </html>

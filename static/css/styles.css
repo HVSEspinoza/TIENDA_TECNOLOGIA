@@ -80,9 +80,9 @@ h2 {
     color: #ff5555;
 }
 
-.action-link, .preview-link, input[type="submit"], button {
+.action-link, .preview-link, input[type="submit"], button, .details-link, .close-details {
     display: inline-block;
-    padding: 10px 20px;
+    padding: 8px 12px; /* Ajustado para el ícono */
     background: #00ffff;
     color: #000000;
     text-decoration: none;
@@ -90,7 +90,7 @@ h2 {
     transition: all 0.3s ease;
 }
 
-.action-link:hover, .preview-link:hover, input[type="submit"]:hover, button:hover {
+.action-link:hover, .preview-link:hover, input[type="submit"]:hover, button:hover, .details-link:hover, .close-details:hover {
     background: #007575;
     transform: scale(1.05);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
@@ -125,7 +125,8 @@ select, input[type="text"], input[type="file"], input[type="submit"], button {
 .table-wrapper {
     margin: 20px auto;
     width: 90%;
-    overflow: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 15px;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
@@ -134,14 +135,27 @@ select, input[type="text"], input[type="file"], input[type="submit"], button {
 table {
     width: 100%;
     border-collapse: collapse;
+    min-width: 600px; /* Suficiente para 6 columnas esenciales */
 }
 
 th, td {
-    padding: 15px;
+    padding: 12px;
     text-align: center;
-    border: 1px solid #ddd;
+    border: 1px solid #ffffff33;
     font-weight: 500;
     text-shadow: 1px 1px 2px #000000;
+}
+
+th {
+    background: rgba(0, 255, 255, 0.2);
+    color: #ffffff;
+    font-weight: 700;
+    text-shadow: 1px 1px 2px #000000;
+    padding: 12px;
+    border: 1px solid #ffffff33;
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 
 .preview-table th {
@@ -157,6 +171,36 @@ tr:nth-child(even) {
 tr:hover {
     background: rgba(0, 255, 255, 0.3);
     transition: background 0.3s;
+}
+
+.details-row {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.details-panel {
+    padding: 15px;
+    text-align: left;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.details-panel p {
+    margin: 5px 0;
+}
+
+.details-link, .close-details {
+    padding: 6px 10px; /* Más pequeño para el ícono */
+}
+
+.details-icon {
+    font-size: 1.2em;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.close-details {
+    margin-top: 10px;
+    display: inline-block;
 }
 
 .row-even {
@@ -188,30 +232,128 @@ tr:hover {
     color: #ffffff;
 }
 
+.exchange-info {
+    margin: 10px 0;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    text-align: center;
+}
+
+.exchange-info p {
+    margin: 5px 0;
+    font-size: 1.1em;
+    color: #ffffff;
+    text-shadow: 1px 1px 2px #000000;
+}
+
+/* Media query para pantallas pequeñas */
 @media (max-width: 768px) {
     h1 {
         font-size: 2em;
     }
+
+    h2 {
+        font-size: 1.5em;
+    }
+
     .file-item, .upload-form, .table-wrapper {
-        width: 90%;
+        width: 95%;
         padding: 10px;
     }
+
     .file-item {
         flex-direction: column;
         text-align: center;
     }
+
     .inline-form, .status, .action-link {
         margin: 5px 0;
         width: 100%;
     }
+
     .search-bar {
         flex-direction: column;
         gap: 10px;
     }
+
     table {
         font-size: 0.9em;
     }
+
     th, td {
         padding: 8px;
+    }
+
+    .table-wrapper {
+        overflow-x: auto;
+    }
+
+    .details-panel {
+        max-width: 90%;
+    }
+
+    .details-link {
+        padding: 5px;
+    }
+
+    .details-icon {
+        font-size: 1.4em;
+    }
+}
+
+/* Media query para pantallas muy pequeñas */
+@media (max-width: 480px) {
+    h1 {
+        font-size: 1.5em;
+    }
+
+    h2 {
+        font-size: 1.2em;
+    }
+
+    th, td {
+        padding: 5px;
+        font-size: 0.8em;
+    }
+
+    .table-wrapper {
+        width: 100%;
+    }
+
+    select, input[type="text"], input[type="file"], input[type="submit"], button {
+        font-size: 1em;
+        padding: 6px;
+    }
+
+    .details-panel {
+        max-width: 95%;
+        padding: 10px;
+    }
+
+    .details-link {
+        padding: 4px;
+    }
+
+    .details-icon {
+        font-size: 1.5em;
+    }
+
+    .details-row {
+        background: rgba(255, 255, 255, 0.2);
+        opacity: 0;
+        transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    
+    .details-row.slide-in {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    
+    .details-row.slide-out {
+        opacity: 0;
+        transform: translateY(-20px);
     }
 }
