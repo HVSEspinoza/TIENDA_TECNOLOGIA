@@ -1,143 +1,26 @@
 import pandas as pd
 import unicodedata
-from models.models import Producto
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
+import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
-import time
+from sqlalchemy.orm import Session
+from models.models import Producto, Almacen
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.by import By
-
-# Configuración de Selenium
-def setup_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Modo headless para no mostrar el navegador
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-    chrome_options.add_argument("--ignore-certificate-errors")
-    chrome_options.add_argument("--incognito")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-    return driver
-
-# Función para obtener la página con Selenium
-def fetch_sunat_page():
-    driver = setup_driver()
-    try:
-        url = "https://e-consulta.sunat.gob.pe/cl-at-ittipcam/tcS01Alias"
-        driver.get(url)
-        
-        # Esperar a que cargue el calendario
-        WebDriverWait(driver, 40).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "table-bordered"))
-        )
-        time.sleep(5)  # Espera adicional para asegurar el renderizado
-
-        html_content = driver.page_source
-        return html_content
-    except Exception as e:
-        print(f"Error al obtener la página de SUNAT con Selenium: {e}")
-        return None
-    finally:
-        driver.quit()
-
-# Función para extraer el tipo de cambio del día actual
-def extract_current_exchange_rate():
-    html_content = fetch_sunat_page()
-    if not html_content:
-        return None
-
-    soup = BeautifulSoup(html_content, 'html.parser')
-    today = datetime.now()
-    # Formato sin ceros iniciales: _2025_3_12
-    today_str = f"_{today.year}_{today.month}_{today.day}"
-
-    # Buscar la celda <td> para el día actual
-    current_cell = soup.find('td', class_=lambda x: x and today_str in x)
-
-    if not current_cell:
-        print(f"No se encontró la celda para {today_str}. Buscando la más reciente...")
-        # Buscar todas las celdas con clase 'current' y tomar la más reciente
-        cells = soup.find_all('td', class_=lambda x: x and 'current' in x)
-        if cells:
-            current_cell = max(cells, key=lambda x: x.get('data-date', '1970-01-01T00:00:00.000Z'))
-        else:
-            print("No se encontraron celdas con clase 'current' en el HTML.")
-            return None
-
-    if current_cell:
-        # Extraer compra y venta
-        compra_div = current_cell.find('div', class_=lambda x: x and 'normal-all-day' in x)
-        venta_div = current_cell.find('div', class_=lambda x: x and 'pap-all-day' in x)
-
-        if not compra_div or not venta_div:
-            print("No se encontraron los valores de compra y venta.")
-            return None
-
-        # Extraer los valores numéricos
-        compra_text = compra_div.text.replace('Compra', '').strip().replace(',', '.')
-        venta_text = venta_div.text.replace('Venta', '').strip().replace(',', '.')
-
-        try:
-            compra = float(compra_text)
-            venta = float(venta_text)
-        except ValueError as e:
-            print(f"Error al convertir los valores a números: {e}")
-            return None
-
-        return {
-            "compra": compra,
-            "venta": venta,
-            "date": today.strftime("%Y-%m-%d")
-        }
-    return None
-
-# Guardar en archivo JSON para caché
-EXCHANGE_RATE_FILE = 'exchange_rates.json'
-
-def save_exchange_rates(rates):
-    with open(EXCHANGE_RATE_FILE, 'w') as f:
-        json.dump(rates, f, indent=2)
-
-# Cargar tasas de cambio desde caché
-def load_exchange_rates():
-    if os.path.exists(EXCHANGE_RATE_FILE):
-        with open(EXCHANGE_RATE_FILE, 'r') as f:
-            return json.load(f)
-    return None
-
-# Función principal para obtener el tipo de cambio
-def obtener_tipo_cambio():
-    # Primero intentar cargar desde caché
-    cached_rate = load_exchange_rates()
-    if cached_rate and datetime.strptime(cached_rate["date"], "%Y-%m-%d").date() == datetime.now().date():
-        print("Usando tipo de cambio desde caché:", cached_rate)
-        return cached_rate["venta"]  # Usamos la venta como referencia principal
-
-    # Si no hay caché o la fecha no coincide, extraer desde SUNAT
-    new_rate = extract_current_exchange_rate()
-    if new_rate:
-        save_exchange_rates(new_rate)
-        print("Tipo de cambio actualizado desde SUNAT:", new_rate)
-        return new_rate["venta"]
-    else:
-        print("No se pudo obtener el tipo de cambio desde SUNAT, usando valor por defecto: 3.85")
-        return 3.85  # Valor por defecto si falla la extracción
-
-def calcular_precio_con_igv(precio_dolares, tipo_cambio, igv):
-    precio_soles = precio_dolares * tipo_cambio
-    precio_soles_con_igv = precio_soles * (1 + igv)
-    return precio_soles_con_igv
+from webdriver_manager.chrome import ChromeDriverManager
+import time
+from decimal import Decimal
 
 def procesar_csv(file_path):
+    """
+    Procesa un archivo CSV, normaliza los encabezados y aplica conversiones a los datos.
+    """
     custom_header = ["CATEGORÍA", "CÓDIGO", "DESCRIPCIÓN", "STOCK", "PRECIO DÓLARES", "GARANTÍA", "MARCA", "PROMOCIÓN", "DETALLE PROMOCIÓN"]
     required_columns = ["CATEGORÍA", "CÓDIGO", "DESCRIPCIÓN", "STOCK", "PRECIO DÓLARES", "GARANTÍA", "MARCA"]
     
@@ -149,6 +32,7 @@ def procesar_csv(file_path):
     df = pd.read_csv(file_path, encoding='utf-8-sig', delimiter=',', on_bad_lines='skip')
     normalized_columns = [unicodedata.normalize('NFKD', col.strip()).encode('ASCII', 'ignore').decode('ASCII').upper()
                          for col in df.columns]
+    print(f"Columnas encontradas en el CSV {file_path}: {normalized_columns}")
     df.columns = normalized_columns
     
     available_columns = [col for col in custom_header_normalized if col in df.columns]
@@ -192,26 +76,175 @@ def procesar_csv(file_path):
     
     return df
 
+def calcular_precio_con_igv(precio_usd, tipo_cambio, igv):
+    """
+    Calcula el precio en soles incluyendo IGV a partir del precio en dólares.
+    """
+    tipo_cambio = Decimal(str(tipo_cambio))
+    precio_usd = Decimal(str(precio_usd)) if not isinstance(precio_usd, Decimal) else precio_usd
+    precio_soles = precio_usd * tipo_cambio
+    factor_igv = Decimal(str(1 + igv))
+    precio_con_igv = precio_soles * factor_igv
+    return Decimal(str(round(precio_con_igv, 2)))
+
+def obtener_tipo_cambio(max_intentos=3):
+    """
+    Obtiene el tipo de cambio (USD a PEN) desde SUNAT usando Selenium y lo guarda en exchange_rates.json.
+    """
+    cache_file = "exchange_rates.json"
+    hoy = datetime.now().date()
+    
+    try:
+        if os.path.exists(cache_file):
+            if os.path.getsize(cache_file) == 0:
+                print(f"El archivo {cache_file} está vacío. Se procederá a obtener el tipo de cambio desde SUNAT.")
+            else:
+                with open(cache_file, 'r') as f:
+                    data = json.load(f)
+                    if not data:
+                        print(f"El archivo {cache_file} contiene un JSON vacío. Se procederá a obtener el tipo de cambio desde SUNAT.")
+                    else:
+                        fecha_guardada = datetime.strptime(data['date'], '%Y-%m-%d').date()
+                        if fecha_guardada == hoy:
+                            print(f"Usando tipo de cambio desde caché: {data}")
+                            return data
+    except (json.JSONDecodeError, KeyError) as e:
+        print(f"Error al leer el archivo de caché {cache_file}: {e}. Se procederá a obtener el tipo de cambio desde SUNAT.")
+    except Exception as e:
+        print(f"Error inesperado al leer el archivo de caché {cache_file}: {e}")
+    
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+    for intento in range(max_intentos):
+        try:
+            print(f"Intento {intento + 1} de {max_intentos}")
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+            url = "https://e-consulta.sunat.gob.pe/cl-at-ittipcam/tcS01Alias"
+            driver.get(url)
+            time.sleep(2)
+            
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.TAG_NAME, "table"))
+            )
+            
+            html = driver.page_source
+            soup = BeautifulSoup(html, 'html.parser')
+            tabla_calendario = soup.find('table', {'class': 'calendar-table'})
+            if not tabla_calendario:
+                raise ValueError("No se encontró la tabla del calendario con class='calendar-table'")
+            
+            dias = tabla_calendario.find_all('td', class_='calendar-day')
+            ultimo_dia_con_datos = None
+            fecha_ultimo_dia = None
+            
+            for dia in dias:
+                fecha_dia = dia.get('data-date')
+                if not fecha_dia:
+                    continue
+                eventos = dia.find_all('div', class_='event')
+                if len(eventos) == 2:
+                    ultimo_dia_con_datos = dia
+                    fecha_ultimo_dia = fecha_dia
+            
+            if not ultimo_dia_con_datos:
+                raise ValueError("No se encontraron días con datos de tipo de cambio")
+            
+            fecha = fecha_ultimo_dia.split('T')[0]
+            eventos = ultimo_dia_con_datos.find_all('div', class_='event')
+            compra = float(eventos[0].find('strong').next_sibling.strip())
+            venta = float(eventos[1].find('strong').next_sibling.strip())
+            
+            tipo_cambio = {
+                'compra': compra,
+                'venta': venta,
+                'date': fecha
+            }
+            
+            try:
+                with open(cache_file, 'w') as f:
+                    json.dump(tipo_cambio, f)
+                print(f"Tipo de cambio actualizado desde SUNAT y guardado en {cache_file}: {tipo_cambio}")
+            except Exception as e:
+                print(f"Error al guardar el tipo de cambio en {cache_file}: {e}")
+            
+            return tipo_cambio
+        
+        except Exception as e:
+            print(f"Error en el intento {intento + 1}: {e}")
+            if intento < max_intentos - 1:
+                time.sleep(5)
+            else:
+                print("Se agotaron los intentos. Usando valores por defecto.")
+                return {'compra': 3.663, 'venta': 3.670, 'date': '2025-03-14'}
+        
+        finally:
+            if 'driver' in locals():
+                driver.quit()
+
 def cargar_csv_a_bd(csv_file, almacen_id, db_session):
+    """
+    Carga los datos de un CSV a la base de datos.
+    """
     try:
         data = procesar_csv(csv_file)
         tipo_cambio = obtener_tipo_cambio()
         igv = 0.18
         db_session.query(Producto).filter_by(almacen_id=almacen_id).delete()
+        
         for _, row in data.iterrows():
-            precio_soles_con_igv = calcular_precio_con_igv(row['PRECIO DOLARES'], tipo_cambio, igv)
-            promocion_valor = row['PROMOCION'] if 'PROMOCION' in row else None
+            precio_soles_con_igv = calcular_precio_con_igv(row['PRECIO DOLARES'], tipo_cambio['venta'], igv)
+            precio_oferta_usd = row['PROMOCION'] if 'PROMOCION' in row and pd.notna(row['PROMOCION']) else None
+            precio_oferta_soles = calcular_precio_con_igv(precio_oferta_usd, tipo_cambio['venta'], igv) if precio_oferta_usd else None
             detalle_promocion = row['DETALLE PROMOCION'] if 'DETALLE PROMOCION' in row else ''
             nuevo_producto = Producto(
-                codigo=row['CODIGO'], descripcion=row['DESCRIPCION'], stock=row['STOCK'],
-                precio_dolares=row['PRECIO DOLARES'], precio_soles=precio_soles_con_igv,
-                garantia=row['GARANTIA'], marca=row['MARCA'], categoria=row['CATEGORIA'],
-                promocion=promocion_valor, detalle_promocion=detalle_promocion, almacen_id=almacen_id
+                codigo=row['CODIGO'],
+                descripcion=row['DESCRIPCION'],
+                stock=row['STOCK'],
+                precio_compra_usd=row['PRECIO DOLARES'],
+                precio_compra_soles=precio_soles_con_igv,
+                precio_oferta_compra_usd=precio_oferta_usd,
+                precio_oferta_compra_soles=precio_oferta_soles,
+                garantia=row['GARANTIA'],
+                marca=row['MARCA'],
+                categoria=row['CATEGORIA'],
+                detalle_promocion=detalle_promocion,
+                almacen_id=almacen_id
             )
             db_session.add(nuevo_producto)
         db_session.commit()
         print(f"Datos del archivo {csv_file} cargados correctamente.")
     except Exception as e:
         print(f"Error al procesar {csv_file}: {e}")
+        db_session.rollback()
+        raise
+
+def recalcular_precios_en_soles(db_session):
+    """
+    Recalcula los precios en soles para todos los productos en la base de datos usando el tipo de cambio actual.
+    """
+    try:
+        tipo_cambio = obtener_tipo_cambio()
+        igv = 0.18
+        productos = db_session.query(Producto).all()
+
+        for producto in productos:
+            producto.precio_compra_soles = calcular_precio_con_igv(
+                producto.precio_compra_usd, tipo_cambio['venta'], igv
+            )
+            if producto.precio_oferta_compra_usd:
+                producto.precio_oferta_compra_soles = calcular_precio_con_igv(
+                    producto.precio_oferta_compra_usd, tipo_cambio['venta'], igv
+                )
+            else:
+                producto.precio_oferta_compra_soles = None
+
+        db_session.commit()
+        print("Precios en soles actualizados correctamente.")
+    except Exception as e:
+        print(f"Error al recalcular precios en soles: {e}")
         db_session.rollback()
         raise

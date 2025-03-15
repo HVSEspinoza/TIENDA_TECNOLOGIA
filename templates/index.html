@@ -1,5 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Subir Archivo CSV</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
 <body>
     <header class="header">
         <h1>Tienda Tecnología</h1>
@@ -8,25 +13,17 @@
             <a href="/archivos">Ver Archivos</a>
         </div>
     </header>
-    <form action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
-        <input type="file" name="file" accept=".csv">
-        <input type="submit" value="Subir">
-    </form>
-</body>
-<head>
-    <meta charset="UTF-8">
-    <title>Subir Archivo CSV</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-</head>
-<body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
     <h1>Subir Archivo CSV</h1>
     <form action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
-        <input type="file" name="file" accept=".csv">
+        <input type="file" name="file" accept=".csv" required>
         <input type="submit" value="Subir">
     </form>
-    <div class="links">
-        <a href="/productos">Ver Productos</a>
-        <a href="/archivos">Ver Archivos</a>
-    </div>
 </body>
 </html>

@@ -42,37 +42,77 @@ def iniciar_programa_gui(root, driver, cookies, almacen_vars, progress_bar, prog
 
             url_almacenes = "https://www.deltron.com.pe/modulos/productos/listaprodnw.php"
             carpeta_descargas = os.path.abspath("descargas")
-            
-            # Extraer datos con reintentos
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    print(f"Intento {attempt + 1} de {max_retries} para extraer datos.")
-                    extraer_datos(url_almacenes, selected_almacenes, driver, carpeta_descargas, progress_queue)
-                    break
-                except Exception as e:
-                    print(f"Error en intento {attempt + 1}: {e}")
-                    if attempt < max_retries - 1:
-                        time.sleep(5)
-                        try:
-                            driver.get("https://www.deltron.com.pe")
-                            print("Reconexión exitosa al sitio.")
-                        except:
-                            print("No se pudo reconectar. Reiniciando driver.")
-                            driver.quit()
-                            driver, new_cookies = iniciar_sesion_gui()  # Reiniciar driver y cookies
-                            cookies.update(new_cookies)  # Actualizar cookies
-                    else:
-                        print("Todos los intentos fallaron. Algunos CSVs pueden estar incompletos.")
-
             base_dir = "C:/Users/CORPORACION ARAZA/Desktop/tienda_tecnologia/productos_deltron"
+            
+            # Lista para almacenar almacenes que fallaron en la descarga
+            almacenes_fallidos = []
+            total_almacenes = len(selected_almacenes)
+            processed_almacenes = 0
+
+            # Primer intento para cada almacén
+            for name, label in selected_almacenes.items():
+                try:
+                    print(f"Intento 1 de 2 para extraer datos del almacén: {label}")
+                    # Limpiar carpeta de descargas antes de intentar
+                    for file in os.listdir(carpeta_descargas):
+                        os.remove(os.path.join(carpeta_descargas, file))
+                    
+                    # Extraer datos solo para este almacén
+                    extraer_datos(url_almacenes, {name: label}, driver, carpeta_descargas, progress_queue)
+                    
+                    # Verificar si se creó una carpeta para este almacén en productos_deltron
+                    folders = [f for f in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, f)) and f.startswith(f"{label}_")]
+                    if folders:
+                        print(f"Descarga exitosa para {label}: Carpeta creada en {base_dir}")
+                    else:
+                        print(f"No se descargó ningún CSV para {label} en el intento 1")
+                        almacenes_fallidos.append((name, label))
+                except Exception as e:
+                    print(f"Error al extraer datos para {label} en intento 1: {e}")
+                    almacenes_fallidos.append((name, label))
+                
+                processed_almacenes += 1
+                if progress_queue:
+                    progress = (processed_almacenes / total_almacenes) * 50
+                    progress_queue.put(progress)
+
+            # Segundo intento para almacenes que fallaron
+            if almacenes_fallidos:
+                print(f"Reintentando descarga para {len(almacenes_fallidos)} almacenes fallidos después de 5 segundos...")
+                time.sleep(5)
+                driver.get(url_almacenes)
+                
+                for name, label in almacenes_fallidos:
+                    try:
+                        print(f"Intento 2 de 2 para extraer datos del almacén: {label}")
+                        # Limpiar carpeta de descargas antes de reintentar
+                        for file in os.listdir(carpeta_descargas):
+                            os.remove(os.path.join(carpeta_descargas, file))
+                        
+                        # Extraer datos solo para este almacén
+                        extraer_datos(url_almacenes, {name: label}, driver, carpeta_descargas, progress_queue)
+                        
+                        # Verificar si se creó una carpeta para este almacén en productos_deltron
+                        folders = [f for f in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, f)) and f.startswith(f"{label}_")]
+                        if folders:
+                            print(f"Descarga exitosa para {label} en reintento: Carpeta creada en {base_dir}")
+                        else:
+                            print(f"No se descargó ningún CSV para {label} en el intento 2")
+                    except Exception as e:
+                        print(f"Error al extraer datos para {label} en intento 2: {e}")
+                    
+                    processed_almacenes += 1
+                    if progress_queue:
+                        progress = (processed_almacenes / total_almacenes) * 50
+                        progress_queue.put(progress)
+
+            # Verificar si hay CSVs para procesar
             csv_info = []
             print(f"Buscando CSVs en {base_dir}")
             for folder in os.listdir(base_dir):
                 folder_path = os.path.join(base_dir, folder)
                 if os.path.isdir(folder_path):
                     almacen_name = folder.split('_')[0]
-                    print(f"Procesando carpeta: {folder}, nombre del almacén: {almacen_name}")
                     if almacen_name in selected_almacenes.values():
                         for file in os.listdir(folder_path):
                             if file.endswith(".csv") and not file.endswith("_modificado.csv"):
@@ -81,7 +121,7 @@ def iniciar_programa_gui(root, driver, cookies, almacen_vars, progress_bar, prog
                                 product_count = get_product_count(csv_file)
                                 csv_info.append((csv_file, output_file, cookies, product_count))
                                 print(f"Encontrado CSV: {csv_file}, productos: {product_count}")
-            
+
             if not csv_info:
                 print("No se encontraron CSVs para procesar. Revisa la extracción.")
                 progress_queue.put(100)

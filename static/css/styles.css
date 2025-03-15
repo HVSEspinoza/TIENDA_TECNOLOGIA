@@ -82,7 +82,7 @@ h2 {
 
 .action-link, .preview-link, input[type="submit"], button, .details-link, .close-details {
     display: inline-block;
-    padding: 8px 12px; /* Ajustado para el ícono */
+    padding: 8px 12px;
     background: #00ffff;
     color: #000000;
     text-decoration: none;
@@ -135,27 +135,42 @@ select, input[type="text"], input[type="file"], input[type="submit"], button {
 table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 600px; /* Suficiente para 6 columnas esenciales */
+    min-width: 600px;
+    table-layout: fixed;
 }
 
 th, td {
-    padding: 12px;
-    text-align: center;
+    padding: 8px;
+    text-align: left;
     border: 1px solid #ffffff33;
     font-weight: 500;
     text-shadow: 1px 1px 2px #000000;
+    overflow-wrap: break-word;
 }
 
 th {
-    background: rgba(0, 255, 255, 0.2);
+    background: rgba(0, 255, 255, 0.4);
     color: #ffffff;
     font-weight: 700;
-    text-shadow: 1px 1px 2px #000000;
-    padding: 12px;
-    border: 1px solid #ffffff33;
-    position: sticky;
-    top: 0;
-    z-index: 1;
+    width: 40%;
+}
+
+td {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    width: 60%;
+}
+
+.details-table th:first-child, .details-table td:first-child {
+    width: 40%;
+}
+
+.details-table th:last-child, .details-table td:last-child {
+    width: 60%;
+}
+
+.details-table td:nth-child(even) {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .preview-table th {
@@ -165,7 +180,7 @@ th {
 }
 
 tr:nth-child(even) {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 tr:hover {
@@ -179,77 +194,121 @@ tr:hover {
 
 .details-panel {
     padding: 15px;
-    text-align: left;
-    max-width: 600px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+    max-width: 1000px;
+    width: 100%;
     margin: 0 auto;
+    border-top: 2px solid #00ffff;
 }
 
-.details-panel p {
-    margin: 5px 0;
+.details-panel h4 {
+    color: #ffffff;
+    margin-top: 0;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #00ffff;
+    padding-bottom: 5px;
+    text-shadow: 1px 1px 2px #000000;
 }
 
-.details-link, .close-details {
-    padding: 6px 10px; /* Más pequeño para el ícono */
+.details-table {
+    border-collapse: collapse;
+    margin-bottom: 15px;
+    width: 100%;
+    table-layout: fixed;
 }
 
-.details-icon {
-    font-size: 1.2em;
+.details-table td {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.details-table .highlight {
     font-weight: bold;
-    line-height: 1;
+    color: #00ffff;
+}
+
+/* Estilo para la tabla de Información General */
+.general-table {
+    margin-bottom: 20px;
+}
+
+/* Estilo para el carrusel */
+.carousel-container {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+}
+
+.carousel-track {
+    display: flex;
+    transition: transform 0.5s ease;
+}
+
+.carousel-card {
+    min-width: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.carousel-prev, .carousel-next {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 255, 255, 0.5);
+    border: none;
+    color: #000000;
+    font-size: 1.5em;
+    padding: 10px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background 0.3s ease;
+}
+
+.carousel-prev:hover, .carousel-next:hover {
+    background: rgba(0, 255, 255, 0.8);
+}
+
+.carousel-prev {
+    left: 10px;
+}
+
+.carousel-next {
+    right: 10px;
+}
+
+.carousel-prev:disabled, .carousel-next:disabled {
+    background: rgba(0, 255, 255, 0.2);
+    cursor: not-allowed;
+}
+
+.note {
+    font-style: italic;
+    color: #cccccc;
+    margin-top: 10px;
+    text-shadow: 1px 1px 2px #000000;
 }
 
 .close-details {
     margin-top: 10px;
-    display: inline-block;
-}
-
-.row-even {
-    background-color: #f9f9f9;
-}
-
-.row-odd {
-    background-color: #fff;
-}
-
-.links {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-}
-
-.links a {
-    color: #ffffff;
+    padding: 8px 16px;
     background: #00ffff;
+    color: #000000;
     text-decoration: none;
-    padding: 10px 20px;
-    border-radius: 5px;
-    transition: background 0.3s;
-    text-shadow: 1px 1px 2px #000000;
+    border-radius: 4px;
+    transition: all 0.3s ease;
 }
 
-.links a:hover {
+.close-details:hover {
     background: #007575;
-    color: #ffffff;
+    transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
-.exchange-info {
-    margin: 10px 0;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    border-radius: 10px;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
-    text-align: center;
-}
-
-.exchange-info p {
-    margin: 5px 0;
-    font-size: 1.1em;
-    color: #ffffff;
-    text-shadow: 1px 1px 2px #000000;
-}
-
-/* Media query para pantallas pequeñas */
+/* Ajustes para pantallas pequeñas */
 @media (max-width: 768px) {
     h1 {
         font-size: 2em;
@@ -259,7 +318,7 @@ tr:hover {
         font-size: 1.5em;
     }
 
-    .file-item, .upload-form, .table-wrapper {
+    .file-item, .upload-form, .table-wrapperGuides, .table-wrapper {
         width: 95%;
         padding: 10px;
     }
@@ -284,7 +343,7 @@ tr:hover {
     }
 
     th, td {
-        padding: 8px;
+        padding: 6px;
     }
 
     .table-wrapper {
@@ -304,7 +363,6 @@ tr:hover {
     }
 }
 
-/* Media query para pantallas muy pequeñas */
 @media (max-width: 480px) {
     h1 {
         font-size: 1.5em;
