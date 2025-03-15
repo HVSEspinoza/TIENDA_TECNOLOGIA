@@ -1,3 +1,4 @@
+# models.py (actualizado)
 from flask_sqlalchemy import SQLAlchemy
 from decimal import Decimal
 
@@ -21,9 +22,13 @@ class Producto(db.Model):
     precio_oferta_compra_soles = db.Column(db.Numeric(10, 2), nullable=True)
     garantia = db.Column(db.String(100), nullable=False)
     marca = db.Column(db.String(255), nullable=False)
-    categoria = db.Column(db.String(255), nullable=False)
+    categoria = db.Column(db.String(255), nullable=False)  # Categoría original del CSV
+    categoria_general = db.Column(db.String(255), nullable=True)  # Nueva categoría general
+    subcategoria = db.Column(db.String(255), nullable=True)  # Nueva subcategoría
     detalle_promocion = db.Column(db.String(255), nullable=True)
     almacen_id = db.Column(db.String(100), db.ForeignKey('almacen.id'))
+    # Agregar la relación
+    almacen = db.relationship('Almacen', backref='productos')
 
     @property
     def precio_venta_soles(self):
