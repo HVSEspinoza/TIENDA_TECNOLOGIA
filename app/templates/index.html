@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tienda Tecnología</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <!-- Encabezado -->
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <h1>Tienda Tecnología</h1>
+            </div>
+            <nav class="nav">
+                <a href="{{ url_for('routes.upload_file') }}" class="nav-link">Subir Archivo</a>
+                <a href="{{ url_for('routes.get_productos') }}" class="nav-link">Ver Productos</a>
+                <a href="{{ url_for('routes.archivos') }}" class="nav-link">Ver Archivos</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Contenido principal -->
+    <main class="main">
+        <section class="hero">
+            <div class="container">
+                <h2>Bienvenido a la Tienda de Tecnología</h2>
+                <p>Explora los productos disponibles en nuestros almacenes.</p>
+            </div>
+        </section>
+
+        <!-- Mensajes flash -->
+        <section class="messages">
+            <div class="container">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <p class="message message-{{ category }}">{{ message }}</p>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+            </div>
+        </section>
+
+        <!-- Lista de almacenes -->
+        <section class="almacenes">
+            <div class="container">
+                <h3>Selecciona un almacén</h3>
+                <div class="almacenes-grid">
+                    {% for almacen_id, nombre in almacenes.items() %}
+                        <a href="{{ url_for('routes.get_productos') }}?almacen_id={{ almacen_id }}" class="almacen-card">
+                            <h4>{{ nombre }}</h4>
+                            <p>Ver productos disponibles</p>
+                        </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Pie de página -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Tienda Tecnología. Todos los derechos reservados.</p>
+            <div class="footer-links">
+                <a href="#">Acerca de</a>
+                <a href="#">Contacto</a>
+                <a href="#">Términos y Condiciones</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

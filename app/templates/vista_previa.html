@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Vista Previa - {{ archivo }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header class="header">
+        <h1>Tienda Tecnología</h1>
+        <div class="links">
+            <a href="{{ url_for('routes.upload_file') }}">Subir Archivo</a>
+            <a href="{{ url_for('routes.get_productos') }}">Ver Productos</a>
+            <a href="{{ url_for('routes.archivos') }}">Ver Archivos</a>
+        </div>
+    </header>
+    <main>
+        <h2>Vista Previa de {{ archivo }}</h2>
+        <table class="preview-table">
+            <thead>
+                <tr>
+                    {% for columna in columnas %}
+                        <th>{{ columna }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for fila in datos %}
+                    <tr class="{{ fila.row_class }}">
+                        {% for columna in columnas %}
+                            <td>{{ fila[columna] }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <form action="{{ url_for('routes.procesar') }}" method="post" style="margin-top: 20px;">
+            <input type="hidden" name="archivo" value="{{ archivo }}">
+            <input type="hidden" name="almacen_id" value="{{ almacen_id }}">
+            <button type="submit" class="action-link">Procesar Archivo</button>
+        </form>
+        <a href="{{ url_for('routes.archivos') }}" class="action-link" style="display: block; margin-top: 10px;">Volver a Archivos</a>
+    </main>
+    <footer>
+        <p>© 2025 Tienda Tecnología. Todos los derechos reservados.</p>
+    </footer>
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+</body>
+</html>
