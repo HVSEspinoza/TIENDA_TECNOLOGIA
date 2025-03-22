@@ -2,6 +2,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from decimal import Decimal
 from app.models import Almacen, Producto, db, ArchivoProcesado
 from utils.helpers import obtener_tipo_cambio, recalcular_precios_en_soles, cargar_csv_a_bd, procesar_csv
+from app.config.category_mappings import categoria_map
+from app.config.category_mappings import mapear_categoria_dinamica  # Importa la función dinámica
+from app.config.navigation import navigation_tree
 import os
 import pandas as pd
 from collections import defaultdict
@@ -172,26 +175,49 @@ def get_productos():
     tipo_cambio = obtener_tipo_cambio()
     igv = Decimal('0.18')
 
+    # Obtener todos los almacenes
+    almacenes = {almacen.id: almacen.nombre for almacen in Almacen.query.all()}
+    print(f"Almacenes disponibles: {almacenes}")  # Depuración
+
+    # Contar productos por almacén
+    productos_por_almacen = {}
+    for almacen_id in almacenes.keys():
+        count = Producto.query.filter_by(almacen_id=almacen_id).count()
+        productos_por_almacen[almacen_id] = count
+    print(f"Productos por almacén: {productos_por_almacen}")  # Depuración
+
     # Siempre consultar todos los productos, luego filtrar si es necesario
     productos = Producto.query.all()
+    print(f"Total de productos cargados inicialmente: {len(productos)}")  # Depuración
 
     if request.method == 'POST':
         almacen_id = request.form.get('almacen_id')
+        print(f"Almacén seleccionado: {almacen_id}")  # Depuración
         if almacen_id and almacen_id != '':
-            # Filtrar los productos unificados para mostrar solo los que tienen stock en el almacén seleccionado
+            # Filtrar los productos por almacén seleccionado
             productos = [p for p in productos if p.almacen_id == almacen_id]
+            print(f"Productos después de filtrar por almacén: {len(productos)}")  # Depuración
+
+    # Normalizar las categorías de los productos
+    for producto in productos:
+        if producto.categoria:
+            producto.categoria = producto.categoria.lower().replace(' - ', ' ')
+            print(f"Categoría normalizada para producto {producto.codigo}: {producto.categoria}")  # Depuración
 
     # Unificar productos usando la función auxiliar
     productos_con_detalles, utilidad_bruta_total, utilidad_neta_total = unificar_productos(productos)
+    print(f"Productos finales enviados a la plantilla: {len(productos_con_detalles)}")  # Depuración
 
     return render_template(
         'productos.html',
         productos=productos_con_detalles,
+        almacenes=almacenes,
         tipo_cambio=tipo_cambio,
         igv=igv,
-        almacenes={almacen.id: almacen.nombre for almacen in Almacen.query.all()},
         utilidad_bruta_total=utilidad_bruta_total,
-        utilidad_neta_total=utilidad_neta_total
+        utilidad_neta_total=utilidad_neta_total,
+        navigation_tree=navigation_tree,
+        category_mapping=categoria_map  # Cambiar category_mapping por categoria_map
     )
 
 @routes.route('/recalcular-precios', methods=['GET'])

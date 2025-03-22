@@ -7,6 +7,7 @@ import json
 import os
 from sqlalchemy.orm import Session
 from app.models import Producto, Almacen
+from app.config.category_mappings import categoria_map, mapear_categoria_dinamica  # Importar ambas
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -29,7 +30,15 @@ def procesar_csv(file_path):
     required_columns_normalized = [unicodedata.normalize('NFKD', col).encode('ASCII', 'ignore').decode('ASCII').upper() 
                                    for col in required_columns]
     
-    df = pd.read_csv(file_path, encoding='utf-8-sig', delimiter=',', on_bad_lines='skip')
+    try:
+        df = pd.read_csv(file_path, encoding='utf-8-sig', delimiter=',', on_bad_lines='skip')
+    except Exception as e:
+        raise ValueError(f"Error al leer el archivo CSV {file_path}: {str(e)}")
+
+    # Validar que el CSV tenga al menos las columnas requeridas
+    if len(df.columns) < len(required_columns):
+        raise ValueError(f"El CSV tiene menos columnas de las requeridas. Columnas esperadas: {required_columns}, Columnas encontradas: {df.columns.tolist()}")
+
     normalized_columns = [unicodedata.normalize('NFKD', col.strip()).encode('ASCII', 'ignore').decode('ASCII').upper()
                          for col in df.columns]
     print(f"Columnas encontradas en el CSV {file_path}: {normalized_columns}")
@@ -50,17 +59,22 @@ def procesar_csv(file_path):
         try:
             return int(float(valor))
         except (ValueError, TypeError):
+            print(f"Advertencia: Stock no válido '{valor}'. Se asumirá 0.")
             return 0
     
     def convertir_precio(valor):
         try:
-            return float(str(valor).replace('$', '')) if pd.notna(valor) and str(valor).strip() != '' else 0.0
+            valor_str = str(valor).replace('$', '').strip()
+            return float(valor_str) if valor_str != '' else 0.0
         except (ValueError, TypeError):
+            print(f"Advertencia: Precio no válido '{valor}'. Se asumirá 0.0.")
             return 0.0
     
     def convertir_texto(valor, max_length=255):
-        texto = str(valor) if pd.notna(valor) and str(valor).strip() != '' else 'sin_valor'
-        return texto[:max_length]
+        if pd.isna(valor) or str(valor).strip() == '':
+            return 'sin_valor'
+        texto = str(valor).strip()
+        return texto[:max_length] if len(texto) > max_length else texto
     
     df['STOCK'] = df['STOCK'].apply(convertir_stock)
     df['PRECIO DOLARES'] = df['PRECIO DOLARES'].apply(convertir_precio)
@@ -94,6 +108,7 @@ def obtener_tipo_cambio(max_intentos=3):
     cache_file = "exchange_rates.json"
     hoy = datetime.now().date()
     
+    # Intentar leer el tipo de cambio desde el caché
     try:
         if os.path.exists(cache_file):
             if os.path.getsize(cache_file) == 0:
@@ -112,13 +127,15 @@ def obtener_tipo_cambio(max_intentos=3):
         print(f"Error al leer el archivo de caché {cache_file}: {e}. Se procederá a obtener el tipo de cambio desde SUNAT.")
     except Exception as e:
         print(f"Error inesperado al leer el archivo de caché {cache_file}: {e}")
-    
+
+    # Configurar Selenium
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
+    driver = None
     for intento in range(max_intentos):
         try:
             print(f"Intento {intento + 1} de {max_intentos}")
@@ -144,6 +161,10 @@ def obtener_tipo_cambio(max_intentos=3):
             for dia in dias:
                 fecha_dia = dia.get('data-date')
                 if not fecha_dia:
+                    continue
+                try:
+                    datetime.strptime(fecha_dia.split('T')[0], '%Y-%m-%d')  # Validar formato de fecha
+                except ValueError:
                     continue
                 eventos = dia.find_all('div', class_='event')
                 if len(eventos) == 2:
@@ -182,7 +203,7 @@ def obtener_tipo_cambio(max_intentos=3):
                 return {'compra': 3.663, 'venta': 3.670, 'date': '2025-03-14'}
         
         finally:
-            if 'driver' in locals():
+            if driver:
                 driver.quit()
 
 def cargar_csv_a_bd(csv_file, almacen_id, db_session):
@@ -195,191 +216,7 @@ def cargar_csv_a_bd(csv_file, almacen_id, db_session):
         igv = 0.18
         db_session.query(Producto).filter_by(almacen_id=almacen_id).delete()
 
-        # Mapeo de categorías actuales a jerarquía optimizada
-        categoria_map = {
-            # Accesorios
-            "acc, muebles de computo": {"categoria_general": "Accesorios", "subcategoria": "Muebles de Computación"},
-            "accesorios": {"categoria_general": "Accesorios", "subcategoria": "Generales"},
-            "accesorios ensamblaje": {"categoria_general": "Accesorios", "subcategoria": "Ensamblaje"},
-            "accesorios usb": {"categoria_general": "Accesorios", "subcategoria": "USB"},
-            "aire acond precision, acc": {"categoria_general": "Accesorios", "subcategoria": "Aire Acondicionado de Precisión"},
-            "asterisk, accesorios": {"categoria_general": "Accesorios", "subcategoria": "Asterisk"},
-            "audio, accesorios de": {"categoria_general": "Accesorios", "subcategoria": "Audio"},
-            "cases, accesorios": {"categoria_general": "Accesorios", "subcategoria": "Carcasas"},
-            "gaming, accesorios": {"categoria_general": "Accesorios", "subcategoria": "Gaming"},
-            "monitores, accesorios": {"categoria_general": "Accesorios", "subcategoria": "Monitores"},
-            "mouse pad/mat, accesorios": {"categoria_general": "Accesorios", "subcategoria": "Mouse Pads"},
-            "notebook, accesorios de": {"categoria_general": "Accesorios", "subcategoria": "Notebooks"},
-            "tablet, accesorios de": {"categoria_general": "Accesorios", "subcategoria": "Tablets"},
-            "t celulares, accesorios": {"categoria_general": "Accesorios", "subcategoria": "Teléfonos Celulares"},
-
-            # Audio
-            "audio, auricular c/mic": {"categoria_general": "Audio", "subcategoria": "Auriculares con Micrófono"},
-            "audio, auricular c/mic gm": {"categoria_general": "Audio", "subcategoria": "Auriculares Gaming con Micrófono"},
-            "audio, parlante inalamb": {"categoria_general": "Audio", "subcategoria": "Parlantes Inalámbricos"},
-            "audio, parlante usb": {"categoria_general": "Audio", "subcategoria": "Parlantes USB"},
-
-            # Barebones y Computadoras
-            "barebones para aio": {"categoria_general": "Computadoras", "subcategoria": "Barebones All-in-One"},
-            "barebones para pc": {"categoria_general": "Computadoras", "subcategoria": "Barebones PC"},
-            "chromebook": {"categoria_general": "Computadoras", "subcategoria": "Chromebooks"},
-            "computadora aio celeron": {"categoria_general": "Computadoras", "subcategoria": "All-in-One Celeron"},
-            "computadora aio core i3": {"categoria_general": "Computadoras", "subcategoria": "All-in-One Core i3"},
-            "computadora aio core i5": {"categoria_general": "Computadoras", "subcategoria": "All-in-One Core i5"},
-            "computadora aio core i7": {"categoria_general": "Computadoras", "subcategoria": "All-in-One Core i7"},
-            "computadora core i5": {"categoria_general": "Computadoras", "subcategoria": "PC Core i5"},
-            "computadora core i7": {"categoria_general": "Computadoras", "subcategoria": "PC Core i7"},
-            "computadora gaming": {"categoria_general": "Computadoras", "subcategoria": "Gaming"},
-            "computadora workstation": {"categoria_general": "Computadoras", "subcategoria": "Workstations"},
-
-            # Cámaras y Smart Home
-            "camara, webcam": {"categoria_general": "Cámaras", "subcategoria": "Webcams"},
-            "smart home - camaras": {"categoria_general": "Smart Home", "subcategoria": "Cámaras"},
-            "smart home - enchufes": {"categoria_general": "Smart Home", "subcategoria": "Enchufes"},
-            "smart home - luces": {"categoria_general": "Smart Home", "subcategoria": "Luces"},
-
-            # Carcasas y Fuentes
-            "cases micro atx": {"categoria_general": "Carcasas", "subcategoria": "Micro ATX"},
-            "cases sin fuente p/gamers": {"categoria_general": "Carcasas", "subcategoria": "Sin Fuente para Gamers"},
-            "cases, fan": {"categoria_general": "Carcasas", "subcategoria": "Ventiladores"},
-            "cases, fuente para": {"categoria_general": "Fuentes", "subcategoria": "ATX Estándar"},
-            "cases, fuente para gaming": {"categoria_general": "Fuentes", "subcategoria": "Gaming"},
-            "fuente atx": {"categoria_general": "Fuentes", "subcategoria": "ATX"},
-            "fuente sfx": {"categoria_general": "Fuentes", "subcategoria": "SFX"},
-
-            # Consolas
-            "consolas ps5": {"categoria_general": "Consolas", "subcategoria": "PlayStation 5"},
-            "consolas, otras marcas": {"categoria_general": "Consolas", "subcategoria": "Otras Marcas"},
-
-            # Coolers
-            "cooler liquido cpu 120": {"categoria_general": "Coolers", "subcategoria": "Líquidos 120mm"},
-            "cooler liquido cpu 240": {"categoria_general": "Coolers", "subcategoria": "Líquidos 240mm"},
-
-            # CPUs
-            "cpu amd athlon sam4": {"categoria_general": "Procesadores", "subcategoria": "AMD Athlon AM4"},
-            "cpu amd ryzen 3 sam4 3xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 3 3xxx AM4"},
-            "cpu amd ryzen 3 sam5 8xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 3 8xxx AM5"},
-            "cpu amd ryzen 5 sam4 3xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 5 3xxx AM4"},
-            "cpu amd ryzen 5 sam4 4xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 5 4xxx AM4"},
-            "cpu amd ryzen 5 sam4 5xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 5 5xxx AM4"},
-            "cpu amd ryzen 5 sam5 7xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 5 7xxx AM5"},
-            "cpu amd ryzen 5 sam5 8xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 5 8xxx AM5"},
-            "cpu amd ryzen 5 sam5 9xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 5 9xxx AM5"},
-            "cpu amd ryzen 7 sam4 5xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 7 5xxx AM4"},
-            "cpu amd ryzen 7 sam5 7xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 7 7xxx AM5"},
-            "cpu amd ryzen 7 sam5 8xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 7 8xxx AM5"},
-            "cpu amd ryzen 7 sam5 9xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 7 9xxx AM5"},
-            "cpu amd ryzen 9 sam5 7xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 9 7xxx AM5"},
-            "cpu amd ryzen 9 sam5 9xxx": {"categoria_general": "Procesadores", "subcategoria": "AMD Ryzen 9 9xxx AM5"},
-
-            # Discos y SSDs
-            "disco duro 2.5 sata": {"categoria_general": "Almacenamiento", "subcategoria": "Discos Duros 2.5 SATA"},
-            "disco duro 3.5 sata": {"categoria_general": "Almacenamiento", "subcategoria": "Discos Duros 3.5 SATA"},
-            "disco duro externo": {"categoria_general": "Almacenamiento", "subcategoria": "Discos Duros Externos"},
-            "ssd 2.5 sata": {"categoria_general": "Almacenamiento", "subcategoria": "SSDs 2.5 SATA"},
-            "ssd m.2 nvme": {"categoria_general": "Almacenamiento", "subcategoria": "SSDs M.2 NVMe"},
-
-            # Impresoras
-            "aire acond. de precision": {"categoria_general": "Climatización", "subcategoria": "Aire Acondicionado de Precisión"},
-            "comercial laser": {"categoria_general": "Impresoras", "subcategoria": "Láser"},
-            "comercial laser multi": {"categoria_general": "Impresoras", "subcategoria": "Multifuncional Láser"},
-            "comercial matricial": {"categoria_general": "Impresoras", "subcategoria": "Matricial"},
-            "comercial tanque tinta": {"categoria_general": "Impresoras", "subcategoria": "Tanque de Tinta"},
-            "comercial tanque tinta mu": {"categoria_general": "Impresoras", "subcategoria": "Multifuncional Tanque de Tinta"},
-            "comercial ticketera": {"categoria_general": "Impresoras", "subcategoria": "Ticketera"},
-            "consumo tanque tinta": {"categoria_general": "Impresoras", "subcategoria": "Tanque de Tinta Consumo"},
-            "consumo tanque tinta mult": {"categoria_general": "Impresoras", "subcategoria": "Multifuncional Tanque de Tinta Consumo"},
-            "suminist p/impr, botellas": {"categoria_general": "Suministros", "subcategoria": "Botellas de Tinta"},
-            "suminist p/impres, cintas": {"categoria_general": "Suministros", "subcategoria": "Cintas de Impresión"},
-
-            # Memorias y Componentes
-            "componentes, repuestos": {"categoria_general": "Componentes", "subcategoria": "Repuestos"},
-            "lectoras de tarjetas": {"categoria_general": "Componentes", "subcategoria": "Lectoras de Tarjetas"},
-            "memoria ddr4": {"categoria_general": "Memorias", "subcategoria": "DDR4"},
-            "memoria ddr5": {"categoria_general": "Memorias", "subcategoria": "DDR5"},
-            "memoria ddr5 ecc": {"categoria_general": "Memorias", "subcategoria": "DDR5 ECC"},
-            "memoria ram ddr3": {"categoria_general": "Memorias", "subcategoria": "DDR3"},
-
-            # Monitores
-            "monitor curvo 27": {"categoria_general": "Monitores", "subcategoria": "Curvos 27"},
-            "monitor curvo 32": {"categoria_general": "Monitores", "subcategoria": "Curvos 32"},
-            "monitor gaming curvo 27": {"categoria_general": "Monitores", "subcategoria": "Gaming Curvos 27"},
-            "monitor gaming curvo 34": {"categoria_general": "Monitores", "subcategoria": "Gaming Curvos 34"},
-            "monitor gaming plano 24": {"categoria_general": "Monitores", "subcategoria": "Gaming Planos 24"},
-            "monitor gaming plano 25": {"categoria_general": "Monitores", "subcategoria": "Gaming Planos 25"},
-            "monitor gaming plano 27": {"categoria_general": "Monitores", "subcategoria": "Gaming Planos 27"},
-            "monitor plano 21.45": {"categoria_general": "Monitores", "subcategoria": "Planos 21-22"},
-            "monitor plano 23": {"categoria_general": "Monitores", "subcategoria": "Planos 23"},
-            "monitor plano 27": {"categoria_general": "Monitores", "subcategoria": "Planos 27"},
-            "monitor plano 31.5": {"categoria_general": "Monitores", "subcategoria": "Planos 31-32"},
-
-            # Mouse y Teclados
-            "mouse inalambrico": {"categoria_general": "Periféricos", "subcategoria": "Mouse Inalámbricos"},
-            "mouse para gamers": {"categoria_general": "Periféricos", "subcategoria": "Mouse Gaming"},
-            "mouse usb": {"categoria_general": "Periféricos", "subcategoria": "Mouse USB"},
-            "teclado inalambrico": {"categoria_general": "Periféricos", "subcategoria": "Teclados Inalámbricos"},
-            "teclado para gamers": {"categoria_general": "Periféricos", "subcategoria": "Teclados Gaming"},
-            "teclado usb": {"categoria_general": "Periféricos", "subcategoria": "Teclados USB"},
-            "teclado+mouse combo kit": {"categoria_general": "Periféricos", "subcategoria": "Kits Teclado + Mouse"},
-            "teclado+mouse kit inalamb": {"categoria_general": "Periféricos", "subcategoria": "Kits Inalámbricos"},
-
-            # Notebooks
-            "notebook 2-in-1 celeron": {"categoria_general": "Notebooks", "subcategoria": "2-in-1 Celeron"},
-            "notebook amd athlon": {"categoria_general": "Notebooks", "subcategoria": "AMD Athlon"},
-            "notebook amd ryzen 3": {"categoria_general": "Notebooks", "subcategoria": "AMD Ryzen 3"},
-            "notebook amd ryzen 5": {"categoria_general": "Notebooks", "subcategoria": "AMD Ryzen 5"},
-            "notebook amd ryzen 7": {"categoria_general": "Notebooks", "subcategoria": "AMD Ryzen 7"},
-            "notebook celeron": {"categoria_general": "Notebooks", "subcategoria": "Celeron"},
-            "notebook core i3": {"categoria_general": "Notebooks", "subcategoria": "Core i3"},
-            "notebook core i5": {"categoria_general": "Notebooks", "subcategoria": "Core i5"},
-            "notebook core i7": {"categoria_general": "Notebooks", "subcategoria": "Core i7"},
-            "notebook core ultra 5": {"categoria_general": "Notebooks", "subcategoria": "Core Ultra 5"},
-            "notebook gaming core i5": {"categoria_general": "Notebooks", "subcategoria": "Gaming Core i5"},
-            "notebook gaming core i7": {"categoria_general": "Notebooks", "subcategoria": "Gaming Core i7"},
-            "notebook gaming ryzen 5": {"categoria_general": "Notebooks", "subcategoria": "Gaming Ryzen 5"},
-            "notebook gaming ryzen 7": {"categoria_general": "Notebooks", "subcategoria": "Gaming Ryzen 7"},
-            "notebook, maletin/mochila": {"categoria_general": "Accesorios", "subcategoria": "Maletines y Mochilas"},
-
-            # Otros
-            "productos sin clasificar": {"categoria_general": "Otros", "subcategoria": "Sin Clasificar"},
-            "rep tb - otros hw": {"categoria_general": "Otros", "subcategoria": "Hardware Variado"},
-            "servicios otros": {"categoria_general": "Otros", "subcategoria": "Servicios"},
-
-            # Redes
-            "red, switch basico": {"categoria_general": "Redes", "subcategoria": "Switches Básicos"},
-
-            # Sillas y Televisores
-            "sillas gamer": {"categoria_general": "Mobiliario", "subcategoria": "Sillas Gaming"},
-            "televisores led/smart tv": {"categoria_general": "Televisores", "subcategoria": "LED/Smart TV"},
-            "televisores, racks para": {"categoria_general": "Accesorios", "subcategoria": "Racks para TV"},
-
-            # Software
-            "ms esd aplicaciones": {"categoria_general": "Software", "subcategoria": "Aplicaciones ESD"},
-            "ms esd office": {"categoria_general": "Software", "subcategoria": "Office ESD"},
-            "ms esd office 365": {"categoria_general": "Software", "subcategoria": "Office 365 ESD"},
-            "ms esd windows business": {"categoria_general": "Software", "subcategoria": "Windows Business ESD"},
-            "ms esd windows consumer": {"categoria_general": "Software", "subcategoria": "Windows Consumer ESD"},
-            "ms windows consumer": {"categoria_general": "Software", "subcategoria": "Windows Consumer"},
-            "ms windows server": {"categoria_general": "Software", "subcategoria": "Windows Server"},
-            "software, antivirus": {"categoria_general": "Software", "subcategoria": "Antivirus"},
-
-            # Tablets
-            "tablet android": {"categoria_general": "Tablets", "subcategoria": "Android"},
-
-            # UPS
-            "ups interactivo": {"categoria_general": "UPS", "subcategoria": "Interactivo"},
-
-            # Video
-            "video, pci exp nvidia gam": {"categoria_general": "Tarjetas de Video", "subcategoria": "PCI Express NVIDIA Gaming"},
-            "video, pci express nvidia": {"categoria_general": "Tarjetas de Video", "subcategoria": "PCI Express NVIDIA"},
-
-            # Teléfonos Celulares
-            "t celulares basicos": {"categoria_general": "Teléfonos Celulares", "subcategoria": "Básicos"},
-            "t celulares, smartwatches": {"categoria_general": "Teléfonos Celulares", "subcategoria": "Smartwatches"},
-        }
-
         categorias_no_mapeadas = set()  # Para rastrear categorías no mapeadas
-
         for _, row in data.iterrows():
             precio_soles_con_igv = calcular_precio_con_igv(row['PRECIO DOLARES'], tipo_cambio['venta'], igv)
             precio_oferta_usd = row['PROMOCION'] if 'PROMOCION' in row and pd.notna(row['PROMOCION']) else None
@@ -388,10 +225,7 @@ def cargar_csv_a_bd(csv_file, almacen_id, db_session):
 
             # Obtener la categoría del CSV y mapearla a la nueva jerarquía
             categoria_csv = row['CATEGORIA'].lower().strip() if isinstance(row['CATEGORIA'], str) and pd.notna(row['CATEGORIA']) else ''
-            mapped_categoria = categoria_map.get(categoria_csv, {
-                "categoria_general": "Sin Clasificar",
-                "subcategoria": "Sin Clasificar"
-            })
+            mapped_categoria = mapear_categoria_dinamica(categoria_csv)
             print(f"Procesando categoría: {categoria_csv} -> General: {mapped_categoria['categoria_general']}, Sub: {mapped_categoria['subcategoria']}")
 
             # Registrar categorías no mapeadas
@@ -415,7 +249,7 @@ def cargar_csv_a_bd(csv_file, almacen_id, db_session):
                 almacen_id=almacen_id
             )
             db_session.add(nuevo_producto)
-        
+
         # Mostrar categorías no mapeadas al final
         if categorias_no_mapeadas:
             print("Advertencia: Se encontraron categorías no mapeadas en el categoria_map:")

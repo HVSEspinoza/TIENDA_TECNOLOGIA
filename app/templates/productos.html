@@ -2,280 +2,294 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Productos</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
-    <a href="/" class="action-link">Volver</a>
-    <h1>Gestión de Productos</h1>
-    
-    <div class="exchange-info">
-        <p><strong>Tipo de cambio (USD a PEN - Venta):</strong> S/{{ tipo_cambio.venta | round(3) }} (Actualizado: {{ tipo_cambio.date }})</p>
-        <p><strong>IGV:</strong> {{ (igv * 100) | round(2) }}%</p>
-    </div>
+    <!-- Encabezado -->
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <a href="/" class="logo-link">
+                    <h1>Gestión de Productos</h1>
+                </a>
+            </div>
+            <nav class="nav">
+                <ul class="nav-list">
+                    <li><a href="/" class="nav-link">Inicio</a></li>
+                    <li><a href="/upload" class="nav-link">Subir Archivo</a></li>
+                    <li><a href="/archivos" class="nav-link">Archivos</a></li>
+                    <li><a href="/productos" class="nav-link active">Productos</a></li>
+                </ul>
+            </nav>
+            <button class="menu-toggle" onclick="toggleMenu()">☰</button>
+        </div>
+    </header>
 
-    <div class="search-bar">
-        <form id="almacenForm" method="post">
-            <select name="almacen_id" onchange="enviarFormulario()">
-                <option value="">Todos los almacenes</option>
-                {% for id, nombre in almacenes.items() %}
-                <option value="{{ id }}">{{ nombre }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        <input type="text" id="searchInput" onkeyup="buscarProductos()" placeholder="Buscar productos...">
-    </div>
-    <div class="table-wrapper">
-        <h2>Gestión de Productos</h2>
-        <table id="productosTable">
-            <thead>
-                <tr>
-                    <th>Descripción</th>
-                    <th>Stock</th>
-                    <th>Precio de Venta al Público</th>
-                    <th>Precio Oferta de Venta</th>
-                    <th>Marca</th>
-                    <th>Categoría</th>
-                    <th>Almacén</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% if productos %}
-                {% for item in productos %}
-                <tr data-product-id="{{ item.producto.id }}">
-                    <td>{{ item.producto.descripcion }}</td>
-                    <td>{{ item.producto.stock }}</td>
-                    <td>S/{{ item.precio_venta_publico | round(2) }}</td>
-                    <td>{% if item.precio_venta_oferta_publico %}S/{{ item.precio_venta_oferta_publico | round(2) }}{% else %}Sin oferta{% endif %}</td>
-                    <td>{{ item.producto.marca }}</td>
-                    <td>{{ item.producto.categoria }}</td>
-                    <td>{{ item.almacen.nombre }}</td>
-                    <td><a href="#" class="details-link" onclick="toggleDetails(event, '{{ item.producto.id }}');"><span class="details-icon">+</span></a></td>
-                </tr>
-                <!-- Panel de detalles -->
-                <tr class="details-row" id="details-{{ item.producto.id }}" style="display: none;">
-                    <td colspan="8">
-                        <div class="details-panel">
-                            <div class="carousel-container" id="carousel-{{ item.producto.id }}">
-                                <div class="carousel-track">
-                                    <!-- Tarjeta 1: Información General -->
-                                    <div class="carousel-card">
-                                        <h4>Información General</h4>
-                                        <table class="details-table general-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Campo</th>
-                                                    <th>Valor</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr>
-                                                    <td>Código</td>
-                                                    <td>{{ item.producto.codigo }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Precio en Dólares</td>
-                                                    <td>${{ item.producto.precio_compra_usd }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Garantía</td>
-                                                    <td>{{ item.producto.garantia }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Promoción (USD)</td>
-                                                    <td>{% if item.producto.precio_oferta_compra_usd %}${{ item.producto.precio_oferta_compra_usd }}{% else %}Sin promoción{% endif %}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Precio en Soles (Costo)</td>
-                                                    <td>S/{{ item.precio_soles | round(2) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Precio Oferta en Soles (Costo)</td>
-                                                    <td>{% if item.precio_oferta_soles %}S/{{ item.precio_oferta_soles | round(2) }}{% else %}Sin oferta{% endif %}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Detalle Promoción</td>
-                                                    <td>{{ item.producto.detalle_promocion if item.producto.detalle_promocion else 'Sin detalle' }}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+    <!-- Contenido principal -->
+    <main class="main">
+        <div class="container flex-container">
+            <!-- Barra lateral con el árbol de categorías -->
+            <div class="sidebar">
+                <div class="category-tree">
+                    <h3>Filtrar por Categoría</h3>
+                    <ul id="categoryTree">
+                        {% for main_category, subcategories in navigation_tree.items() %}
+                            <li>
+                                <span class="toggle" onclick="toggleCategory(this)">[+]</span>
+                                {{ main_category }}
+                                <ul style="display: none;">
+                                    {% for subcategory, options in subcategories.items() %}
+                                        <li>
+                                            <span class="toggle" onclick="toggleCategory(this)">[+]</span>
+                                            <a href="#" onclick="selectCategory('{{ subcategory }}', event)">{{ subcategory }}</a>
+                                            <ul style="display: none;">
+                                                {% for option in options %}
+                                                    <li>
+                                                        <a href="#" onclick="selectCategory('{{ subcategory }} - {{ option }}', event)">{{ option }}</a>
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Contenido principal -->
+            <div class="main-content">
+                <!-- Información de tipo de cambio e IGV -->
+                <div class="exchange-info">
+                    <p><strong>Tipo de cambio (USD a PEN - Venta):</strong> S/{{ tipo_cambio.venta | round(3) }} (Actualizado: {{ tipo_cambio.date }})</p>
+                    <p><strong>IGV:</strong> {{ (igv * 100) | round(2) }}%</p>
+                </div>
+
+                <!-- Barra de búsqueda y filtro de almacén -->
+                <div class="search-bar">
+                    <form id="almacenForm" method="post">
+                        <select name="almacen_id" onchange="enviarFormulario()">
+                            <option value="">Todos los almacenes</option>
+                            {% for id, nombre in almacenes.items() %}
+                            <option value="{{ id }}">{{ nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    <input type="text" id="searchInput" onkeyup="buscarProductos()" placeholder="Buscar productos...">
+                    <button onclick="limpiarFiltros()">Limpiar Filtros</button>
+                </div>
+
+                <!-- Tabla de productos -->
+                <div class="table-wrapper">
+                    <h2>Gestión de Productos</h2>
+                    <p id="productCount"></p>
+                    <table id="productosTable">
+                        <thead>
+                            <tr>
+                                <th>Descripción</th>
+                                <th>Stock</th>
+                                <th>Precio de Venta al Público</th>
+                                <th>Precio Oferta de Venta</th>
+                                <th>Marca</th>
+                                <th>Categoría</th>
+                                <th>Almacén</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if productos %}
+                            {% for item in productos %}
+                            <tr data-product-id="{{ item.producto.id }}">
+                                <td>{{ item.producto.descripcion }}</td>
+                                <td>{{ item.producto.stock }}</td>
+                                <td>S/{{ item.precio_venta_publico | round(2) }}</td>
+                                <td>{% if item.precio_venta_oferta_publico %}S/{{ item.precio_venta_oferta_publico | round(2) }}{% else %}Sin oferta{% endif %}</td>
+                                <td>{{ item.producto.marca }}</td>
+                                <td>{{ item.producto.categoria }}</td>
+                                <td>{{ item.almacen.nombre }}</td>
+                                <td><a href="#" class="details-link" onclick="toggleDetails(event, '{{ item.producto.id }}');"><span class="details-icon">+</span></a></td>
+                            </tr>
+                            <!-- Panel de detalles -->
+                            <tr class="details-row" id="details-{{ item.producto.id }}" style="display: none;">
+                                <td colspan="8">
+                                    <div class="details-panel">
+                                        <div class="carousel-container" id="carousel-{{ item.producto.id }}">
+                                            <div class="carousel-track">
+                                                <!-- Tarjeta 1: Información General -->
+                                                <div class="carousel-card">
+                                                    <h4>Información General</h4>
+                                                    <table class="details-table general-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Campo</th>
+                                                                <th>Valor</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr>
+                                                                <td>Código</td>
+                                                                <td>{{ item.producto.codigo }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Precio en Dólares</td>
+                                                                <td>${{ item.producto.precio_compra_usd }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Garantía</td>
+                                                                <td>{{ item.producto.garantia }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Promoción (USD)</td>
+                                                                <td>{% if item.producto.precio_oferta_compra_usd %}${{ item.producto.precio_oferta_compra_usd }}{% else %}Sin promoción{% endif %}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Precio en Soles (Costo)</td>
+                                                                <td>S/{{ item.precio_soles | round(2) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Precio Oferta en Soles (Costo)</td>
+                                                                <td>{% if item.precio_oferta_soles %}S/{{ item.precio_oferta_soles | round(2) }}{% else %}Sin oferta{% endif %}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Detalle Promoción</td>
+                                                                <td>{{ item.producto.detalle_promocion if item.producto.detalle_promocion else 'Sin detalle' }}</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                <!-- Tarjeta 2: Basado en Precio de Venta al Público -->
+                                                <div class="carousel-card">
+                                                    <h4>Basado en Precio de Venta al Público</h4>
+                                                    <table class="details-table calculation-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Concepto</th>
+                                                                <th>Valor</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr>
+                                                                <td>Precio de Venta</td>
+                                                                <td class="highlight">S/{{ item.precio_venta_publico | round(2) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Costo</td>
+                                                                <td>S/{{ item.precio_soles | round(2) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Margen Bruto</td>
+                                                                <td class="highlight">S/{{ item.margen_bruto_normal | round(2) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>IGV por Pagar (de la venta)</td>
+                                                                <td>S/{{ item.igv_por_pagar_normal | round(4) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Impuesto a la Renta (1%)</td>
+                                                                <td>S/{{ item.impuesto_renta_normal | round(4) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Pago por Tarjeta (5%)</td>
+                                                                <td>S/{{ item.costo_tarjeta_credito_normal | round(4) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Total Utilidad por Unidad</td>
+                                                            <td class="highlight">S/{{ item.utilidad_por_unidad_normal | round(4) }}</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                <!-- Tarjeta 3: Basado en Precio Oferta de Venta (si aplica) -->
+                                                {% if item.precio_venta_oferta_publico %}
+                                                <div class="carousel-card">
+                                                    <h4>Basado en Precio Oferta de Venta</h4>
+                                                    <table class="details-table calculation-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Concepto</th>
+                                                                <th>Valor</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr>
+                                                                <td>Precio de Venta</td>
+                                                                <td class="highlight">S/{{ item.precio_venta_oferta_publico | round(2) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Costo</td>
+                                                                <td>S/{{ item.precio_oferta_soles | round(2) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Margen Bruto</td>
+                                                                <td class="highlight">S/{{ item.margen_bruto_oferta | round(2) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>IGV por Pagar (de la venta)</td>
+                                                                <td>S/{{ item.igv_por_pagar_oferta | round(4) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Impuesto a la Renta (1%)</td>
+                                                                <td>S/{{ item.impuesto_renta_oferta | round(4) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Pago por Tarjeta (5%)</td>
+                                                                <td>S/{{ item.costo_tarjeta_credito_oferta | round(4) }}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>Total Utilidad por Unidad</td>
+                                                                <td class="highlight">S/{{ item.utilidad_por_unidad_oferta | round(4) }}</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+
+                                            <!-- Botones de navegación -->
+                                            <button class="carousel-prev" onclick="moveCarousel('{{ item.producto.id }}', -1)">❮</button>
+                                            <button class="carousel-next" onclick="moveCarousel('{{ item.producto.id }}', 1)">❯</button>
+                                        </div>
+                                        <p class="note"><strong>Nota:</strong> El precio de venta al público incluye un recargo del 5% por pago con tarjeta.</p>
+                                        <a href="#" class="close-details" onclick="toggleDetails(event, '{{ item.producto.id }}');">Cerrar</a>
                                     </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td colspan="8">Selecciona un almacén para ver los productos</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                    <div class="pagination">
+                        <button onclick="previousPage()">Anterior</button>
+                        <span id="pageInfo"></span>
+                        <button onclick="nextPage()">Siguiente</button>
+                    </div>
+                </div>
 
-                                    <!-- Tarjeta 2: Basado en Precio de Venta al Público -->
-                                    <div class="carousel-card">
-                                        <h4>Basado en Precio de Venta al Público</h4>
-                                        <table class="details-table calculation-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Concepto</th>
-                                                    <th>Valor</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr>
-                                                    <td>Precio de Venta</td>
-                                                    <td class="highlight">S/{{ item.precio_venta_publico | round(2) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Costo</td>
-                                                    <td>S/{{ item.precio_soles | round(2) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Margen Bruto</td>
-                                                    <td class="highlight">S/{{ item.margen_bruto_normal | round(2) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>IGV por Pagar (de la venta)</td>
-                                                    <td>S/{{ item.igv_por_pagar_normal | round(4) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Impuesto a la Renta (1%)</td>
-                                                    <td>S/{{ item.impuesto_renta_normal | round(4) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Pago por Tarjeta (5%)</td>
-                                                    <td>S/{{ item.costo_tarjeta_credito_normal | round(4) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Total Utilidad por Unidad</td>
-                                                    <td class="highlight">S/{{ item.utilidad_por_unidad_normal | round(4) }}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
+                <!-- Resumen financiero -->
+                <div class="financial-summary">
+                    <h2>Resumen Financiero</h2>
+                    <p><strong>Utilidad Bruta Total:</strong> S/{{ utilidad_bruta_total | round(2) }}</p>
+                    <p><strong>Utilidad Neta Total:</strong> S/{{ utilidad_neta_total | round(2) }}</p>
+                </div>
+            </div>
+        </div>
+    </main>
 
-                                    <!-- Tarjeta 3: Basado en Precio Oferta de Venta (si aplica) -->
-                                    {% if item.precio_venta_oferta_publico %}
-                                    <div class="carousel-card">
-                                        <h4>Basado en Precio Oferta de Venta</h4>
-                                        <table class="details-table calculation-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Concepto</th>
-                                                    <th>Valor</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr>
-                                                    <td>Precio de Venta</td>
-                                                    <td class="highlight">S/{{ item.precio_venta_oferta_publico | round(2) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Costo</td>
-                                                    <td>S/{{ item.precio_oferta_soles | round(2) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Margen Bruto</td>
-                                                    <td class="highlight">S/{{ item.margen_bruto_oferta | round(2) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>IGV por Pagar (de la venta)</td>
-                                                    <td>S/{{ item.igv_por_pagar_oferta | round(4) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Impuesto a la Renta (1%)</td>
-                                                    <td>S/{{ item.impuesto_renta_oferta | round(4) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Pago por Tarjeta (5%)</td>
-                                                    <td>S/{{ item.costo_tarjeta_credito_oferta | round(4) }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Total Utilidad por Unidad</td>
-                                                    <td class="highlight">S/{{ item.utilidad_por_unidad_oferta | round(4) }}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    {% endif %}
-                                </div>
-
-                                <!-- Botones de navegación -->
-                                <button class="carousel-prev" onclick="moveCarousel('{{ item.producto.id }}', -1)">&#10094;</button>
-                                <button class="carousel-next" onclick="moveCarousel('{{ item.producto.id }}', 1)">&#10095;</button>
-                            </div>
-                            <p class="note"><strong>Nota:</strong> El precio de venta al público incluye un recargo del 5% por pago con tarjeta.</p>
-                            <a href="#" class="close-details" onclick="toggleDetails(event, '{{ item.producto.id }}');">Cerrar</a>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-                {% else %}
-                <tr>
-                    <td colspan="8">Selecciona un almacén para ver los productos</td>
-                </tr>
-                {% endif %}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Resumen financiero -->
-    <div class="financial-summary">
-        <h2>Resumen Financiero</h2>
-        <p><strong>Utilidad Bruta Total:</strong> S/{{ utilidad_bruta_total | round(2) }}</p>
-        <p><strong>Utilidad Neta Total:</strong> S/{{ utilidad_neta_total | round(2) }}</p>
-    </div>
-
+    <!-- Cargar scripts.js -->
     <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
     <script>
-        function toggleDetails(event, productId) {
-            event.preventDefault();
-            const detailsRow = document.getElementById(`details-${productId}`);
-            if (detailsRow.style.display === 'none' || detailsRow.style.display === '') {
-                detailsRow.style.display = 'table-row';
-                detailsRow.classList.add('slide-in');
-            } else {
-                detailsRow.classList.add('slide-out');
-                setTimeout(() => {
-                    detailsRow.style.display = 'none';
-                }, 300);
-            }
-        }
-
-        function enviarFormulario() {
-            document.getElementById('almacenForm').submit();
-        }
-
-        function buscarProductos() {
-            const input = document.getElementById('searchInput').value.toLowerCase();
-            const rows = document.querySelectorAll('#productosTable tbody tr:not(.details-row)');
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(input) ? '' : 'none';
-                const detailsRow = row.nextElementSibling;
-                if (detailsRow && detailsRow.classList.contains('details-row')) {
-                    detailsRow.style.display = row.style.display === 'none' ? 'none' : '';
-                }
-            });
-        }
-
-        // Control del carrusel
-        const carousels = {};
-        function moveCarousel(productId, direction) {
-            const carousel = document.getElementById(`carousel-${productId}`);
-            const track = carousel.querySelector('.carousel-track');
-            const cards = track.querySelectorAll('.carousel-card');
-            if (!carousels[productId]) {
-                carousels[productId] = { currentIndex: 0 };
-            }
-            let currentIndex = carousels[productId].currentIndex;
-            currentIndex += direction;
-
-            // Limitar el índice dentro del rango
-            if (currentIndex < 0) currentIndex = 0;
-            if (currentIndex >= cards.length) currentIndex = cards.length - 1;
-
-            carousels[productId].currentIndex = currentIndex;
-
-            // Mover el carrusel
-            track.style.transform = `translateX(-${currentIndex * 100}%)`;
-
-            // Habilitar/deshabilitar botones
-            const prevButton = carousel.querySelector('.carousel-prev');
-            const nextButton = carousel.querySelector('.carousel-next');
-            prevButton.disabled = currentIndex === 0;
-            nextButton.disabled = currentIndex === cards.length - 1;
+        function toggleMenu() {
+            const nav = document.querySelector('.nav');
+            nav.classList.toggle('active');
         }
     </script>
 </body>
